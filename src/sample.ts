@@ -8,6 +8,7 @@ import { sampleGeometric } from "./distributions/geometric.js";
 import type { NumericDistribution } from "./distributions/index.js";
 import { sampleNormal } from "./distributions/normal.js";
 import { samplePoisson } from "./distributions/poisson.js";
+import { sampleTriangular } from "./distributions/triangular.js";
 import { sampleUniform } from "./distributions/uniform.js";
 import type { RandomSource } from "./random.js";
 
@@ -26,6 +27,9 @@ export function sampleNumeric(
   switch (value.type) {
     case "uniform":
       result = sampleUniform(value, random);
+      break;
+    case "triangular":
+      result = sampleTriangular(value, random);
       break;
     case "normal":
       result = sampleNormal(value, random);

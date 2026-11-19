@@ -46,6 +46,10 @@ export {
   samplePoisson,
 } from "./distributions/poisson.js";
 export {
+  sampleTriangular,
+  type Triangular,
+} from "./distributions/triangular.js";
+export {
   sampleUniform,
   type Uniform,
 } from "./distributions/uniform.js";

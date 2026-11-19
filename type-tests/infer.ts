@@ -29,7 +29,13 @@ type Checks = [
   Expect<
     Equal<
       p.infer<typeof normal>,
-      { type: "normal"; mean: number; stddev: number }
+      {
+        type: "normal";
+        mean: number;
+        stddev: number;
+        min?: number | undefined;
+        max?: number | undefined;
+      }
     >
   >,
   Expect<Equal<p.infer<typeof strings>["values"][number], string>>,

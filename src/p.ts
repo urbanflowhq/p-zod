@@ -11,8 +11,10 @@ import { geometricSchema } from "./distributions/geometric.js";
 import { distributionSchema } from "./distributions/index.js";
 import { normalSchema } from "./distributions/normal.js";
 import { poissonSchema } from "./distributions/poisson.js";
+import { triangularSchema } from "./distributions/triangular.js";
 import { uniformSchema } from "./distributions/uniform.js";
 
+export const triangular = () => triangularSchema;
 export const uniform = () => uniformSchema;
 export const normal = () => normalSchema;
 export const bernoulli = () => bernoulliSchema;

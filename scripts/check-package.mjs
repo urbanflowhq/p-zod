@@ -65,7 +65,7 @@ try {
     path.join(consumer, "check.ts"),
     `
 import z from "zod";
-import p from "@urbanflow/p-zod";
+import p, { sampleTriangular, type Triangular, type Normal } from "@urbanflow/p-zod";
 
 const model = p.probabilistic(z.object({ first: z.number(), second: z.number(), label: z.string().default("member") }));
 const database = p.database({ price: p.rv.uniform({ min: 2, max: 2 }) });
@@ -73,6 +73,11 @@ const input: p.input<typeof model> = { first: p.rv.ref("price"), second: p.rv.re
 const loaded = p.database(JSON.parse(JSON.stringify(database)));
 const output: p.infer<typeof model> = model.sample(input, loaded);
 if (output.first !== 2 || output.second !== 2 || output.label !== "member") throw new Error("Unexpected consumer result");
+const triangle: Triangular = p.rv.triangular({ min: 0, mode: 2, max: 8 });
+if (sampleTriangular(triangle, () => 0.25) !== 2) throw new Error("Triangular export failed");
+const bounded: Normal = p.rv.normal({ mean: 1, stddev: 1, min: 0, max: 2 });
+const boundedResult = p.probabilistic(z.number()).sample(bounded, () => 0);
+if (boundedResult < 0 || boundedResult > 2) throw new Error("Normal truncation failed");
 const api = await import("@urbanflow/p-zod");
 if ("normalSchema" in api) throw new Error("Internal schemas leaked into public exports");
 console.log("Consumer import, declarations, shared RVs, and JSON round trip passed");
