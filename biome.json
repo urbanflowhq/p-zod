@@ -49,6 +49,12 @@
           }
         }
       }
+    },
+    {
+      "includes": [".changeset/*.md"],
+      "formatter": {
+        "enabled": false
+      }
     }
   ]
 }
