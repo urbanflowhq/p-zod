@@ -51,7 +51,7 @@
       }
     },
     {
-      "includes": [".changeset/*.md"],
+      "includes": [".changeset/*.md", "CHANGELOG.md"],
       "formatter": {
         "enabled": false
       }
