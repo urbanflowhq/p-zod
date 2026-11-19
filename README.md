@@ -27,7 +27,7 @@ The current scope is structured sampling and Bayesian-network forward sampling.
 
 | Capability                                                                 | Status          |
 | -------------------------------------------------------------------------- | --------------- |
-| Eleven distributions, including weighted categorical choices               | Implemented     |
+| Twelve distributions, including weighted categorical choices               | Implemented     |
 | Zod Classic and Mini description parsing                                   | Implemented     |
 | Nested and recursive structures, native dates, maps, and sets              | Implemented     |
 | Shared references with one raw value per ID per draw                       | Implemented     |
@@ -116,8 +116,9 @@ Each draw then passes through the original outcome schema.
 
 A valid description does not guarantee that every draw meets the outcome
 constraints. A normal distribution can produce a value below a field's minimum.
-That draw throws a Zod validation error. The library does not retry, truncate, or
-clamp samples to satisfy an outcome schema.
+That draw throws a Zod validation error. The wrapper does not automatically retry,
+truncate, or clamp samples to satisfy an outcome schema. To bound a normal
+distribution, specify `min` and/or `max` in its descriptor.
 
 Custom refinements, defaults, preprocessors, and transforms run on the sampled
 outcome. Checks affected by overwrite transforms are deferred too. Apply outcome
@@ -174,7 +175,7 @@ like `z.input` and `z.infer`:
 ```ts
 const normal = p.normal();
 type Normal = p.infer<typeof normal>;
-// { type: "normal"; mean: number; stddev: number }
+// { type: "normal"; mean: number; stddev: number; min?: number; max?: number }
 ```
 
 `Description<T>` exposes the recursive probabilistic form of a Zod input type.
@@ -241,6 +242,57 @@ The examples share [a seeded test RNG](./examples/random.mjs). Create a new RNG
 with the same seed to repeat a run. A prepared sampler retains the RNG state
 across draws. Results depend on the library version and traversal order, since
 model changes can change random-number consumption.
+
+### Describe fixed, ranged, and likely values
+
+A numeric UI can offer these three shapes without changing the outcome schema:
+
+| UI choice    | Stored description                                     | Meaning                                    |
+| ------------ | ------------------------------------------------------ | ------------------------------------------ |
+| Fixed        | `100`                                                  | Always 100                                 |
+| Range        | `{ type: "uniform", min: 80, max: 140 }`               | All values in the range have equal density |
+| Likely value | `{ type: "triangular", min: 80, mode: 100, max: 140 }` | Bounded values with peak density at 100    |
+
+`mode` is the most-likely value, not the mean. A triangular distribution's mean is
+`(min + mode + max) / 3`. Its mode may equal either endpoint. When all three
+parameters are equal, sampling returns that constant without consuming randomness.
+
+Normal distributions also support optional lower and upper truncation bounds.
+They retain a normal-shaped density within those bounds, renormalized to that
+interval. `mean` and `stddev` describe the underlying normal; the truncated
+samples generally have a different mean and standard deviation.
+
+<!-- example: examples/uncertain-values.mjs -->
+```js
+import p from "@urbanflow/p-zod";
+import z from "zod";
+import { seededRandom } from "./random.mjs";
+
+const value = p.probabilistic(z.number().nonnegative());
+const inputs = {
+  fixed: 100,
+  range: p.rv.uniform({ min: 80, max: 140 }),
+  likely: p.rv.triangular({ min: 80, mode: 100, max: 140 }),
+  boundedNormal: p.rv.normal({ mean: 100, stddev: 15, min: 80, max: 140 }),
+};
+const random = seededRandom(41);
+console.log(
+  JSON.stringify(
+    Object.fromEntries(
+      Object.entries(inputs).map(([name, input]) => [
+        name,
+        value.sample(input, random),
+      ]),
+    ),
+  ),
+);
+```
+
+To supply only a lower bound, use `p.rv.normal({ mean: 100, stddev: 15, min: 0 })`;
+for only an upper bound, supply `max` instead. Bounds must be finite. A positive
+`stddev` requires `min < max` when both bounds are present. With `stddev: 0`, the
+mean must lie inside the bounds; equal bounds at the mean are allowed. Invalid
+configurations fail during description parsing, before any random draw.
 
 ### Generate API fixtures
 
@@ -577,19 +629,20 @@ console.log(
 All numeric parameters must be finite. Factories validate descriptors; builders
 construct plain descriptors from the listed parameter object.
 
-| Factory                       | Builder                                  | Parameters and support                             |
-| ----------------------------- | ---------------------------------------- | -------------------------------------------------- |
-| `p.uniform()`                 | `p.rv.uniform({ min, max })`             | `min <= max`; equal bounds give a constant         |
-| `p.normal()`                  | `p.rv.normal({ mean, stddev })`          | `stddev >= 0`; zero gives the mean                 |
-| `p.bernoulli()`               | `p.rv.bernoulli({ p })`                  | `0 <= p <= 1`; numeric `0` or `1`                  |
-| `p.binomial()`                | `p.rv.binomial({ n, p })`                | Safe integer `n >= 0`, `0 <= p <= 1`               |
-| `p.poisson()`                 | `p.rv.poisson({ lambda })`               | `lambda >= 0`; nonnegative count                   |
-| `p.exponential()`             | `p.rv.exponential({ rate })`             | `rate > 0`; mean `1 / rate`                        |
-| `p.gamma()`                   | `p.rv.gamma({ shape, scale })`           | Both positive; mean `shape * scale`                |
-| `p.beta()`                    | `p.rv.beta({ alpha, beta })`             | Both positive; samples between 0 and 1             |
-| `p.discreteUniform()`         | `p.rv.discreteUniform({ min, max })`     | Inclusive safe-integer bounds and range size       |
-| `p.geometric()`               | `p.rv.geometric({ p })`                  | `0 < p <= 1`; trials through first success, from 1 |
-| `p.categorical(valueSchema?)` | `p.rv.categorical({ values, weights? })` | Nonempty choices and relative weights              |
+| Factory                       | Builder                                     | Parameters and support                                                      |
+| ----------------------------- | ------------------------------------------- | --------------------------------------------------------------------------- |
+| `p.uniform()`                 | `p.rv.uniform({ min, max })`                | `min <= max`; equal bounds give a constant                                  |
+| `p.normal()`                  | `p.rv.normal({ mean, stddev, min?, max? })` | `stddev >= 0`; optional truncation bounds; zero gives the mean if in bounds |
+| `p.triangular()`              | `p.rv.triangular({ min, mode, max })`       | `min <= mode <= max`; equal bounds give a constant                          |
+| `p.bernoulli()`               | `p.rv.bernoulli({ p })`                     | `0 <= p <= 1`; numeric `0` or `1`                                           |
+| `p.binomial()`                | `p.rv.binomial({ n, p })`                   | Safe integer `n >= 0`, `0 <= p <= 1`                                        |
+| `p.poisson()`                 | `p.rv.poisson({ lambda })`                  | `lambda >= 0`; nonnegative count                                            |
+| `p.exponential()`             | `p.rv.exponential({ rate })`                | `rate > 0`; mean `1 / rate`                                                 |
+| `p.gamma()`                   | `p.rv.gamma({ shape, scale })`              | Both positive; mean `shape * scale`                                         |
+| `p.beta()`                    | `p.rv.beta({ alpha, beta })`                | Both positive; samples between 0 and 1                                      |
+| `p.discreteUniform()`         | `p.rv.discreteUniform({ min, max })`        | Inclusive safe-integer bounds and range size                                |
+| `p.geometric()`               | `p.rv.geometric({ p })`                     | `0 < p <= 1`; trials through first success, from 1                          |
+| `p.categorical(valueSchema?)` | `p.rv.categorical({ values, weights? })`    | Nonempty choices and relative weights                                       |
 
 Weights must be finite, nonnegative, match the choice count, and include a positive
 entry. Without weights, choices have equal probabilities. Zero-weight choices
@@ -611,6 +664,12 @@ source. They skip parsing and wrapper outcome validation.
 Sampling uses JavaScript double precision. Rounding and underflow can produce
 endpoints for continuous distributions. Nonfinite numeric samples throw
 `RangeError`; geometric samples also reject unsafe integer results.
+
+The truncated normal sampler uses uniform proposals for narrow intervals,
+normal rejection near the mean, and an exponential proposal for distant tails.
+The tail method follows [Robert’s truncated normal sampler](https://arxiv.org/abs/0907.4010).
+If a tail bound cannot be represented in standardized floating-point units,
+sampling throws `RangeError` instead of entering a rejection loop.
 
 Binomial sampling uses repeated Bernoulli trials, so cost grows with `n`. Poisson
 sampling uses exponential waiting times, so expected cost grows with `lambda`.

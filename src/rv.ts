@@ -27,11 +27,17 @@ import { type Gamma, gammaSchema } from "./distributions/gamma.js";
 import { type Geometric, geometricSchema } from "./distributions/geometric.js";
 import { type Normal, normalSchema } from "./distributions/normal.js";
 import { type Poisson, poissonSchema } from "./distributions/poisson.js";
+import {
+  type Triangular,
+  triangularSchema,
+} from "./distributions/triangular.js";
 import { type Uniform, uniformSchema } from "./distributions/uniform.js";
 import { jsonDataSchema } from "./json.js";
 
 export const uniform = (parameters: Omit<Uniform, "type">): Uniform =>
   uniformSchema.parse({ ...parameters, type: "uniform" });
+export const triangular = (parameters: Omit<Triangular, "type">): Triangular =>
+  triangularSchema.parse({ ...parameters, type: "triangular" });
 export const normal = (parameters: Omit<Normal, "type">): Normal =>
   normalSchema.parse({ ...parameters, type: "normal" });
 export const bernoulli = (parameters: Omit<Bernoulli, "type">): Bernoulli =>

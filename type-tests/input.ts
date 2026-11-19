@@ -37,7 +37,13 @@ type Checks = [
   Expect<
     Equal<
       p.input<typeof normal>,
-      { type: "normal"; mean: number; stddev: number }
+      {
+        type: "normal";
+        mean: number;
+        stddev: number;
+        min?: number | undefined;
+        max?: number | undefined;
+      }
     >
   >,
   Expect<Equal<p.input<typeof plain>, number>>,

@@ -9,10 +9,12 @@ import { gammaSchema } from "./gamma.js";
 import { geometricSchema } from "./geometric.js";
 import { normalSchema } from "./normal.js";
 import { poissonSchema } from "./poisson.js";
+import { triangularSchema } from "./triangular.js";
 import { uniformSchema } from "./uniform.js";
 
 export const numericDistributionSchema = z.discriminatedUnion("type", [
   uniformSchema,
+  triangularSchema,
   normalSchema,
   bernoulliSchema,
   binomialSchema,

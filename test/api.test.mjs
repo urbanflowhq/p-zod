@@ -7,6 +7,7 @@ const document = library.p.probabilistic(z.json());
 
 const examples = [
   ["uniform", "uniform", { min: 0, max: 1 }, library.uniform],
+  ["triangular", "triangular", { min: 0, mode: 1, max: 3 }, library.triangular],
   ["normal", "normal", { mean: 0, stddev: 1 }, library.normal],
   ["bernoulli", "bernoulli", { p: 0.5 }, library.bernoulli],
   ["binomial", "binomial", { n: 5, p: 0.5 }, library.binomial],
