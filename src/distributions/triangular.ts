@@ -19,21 +19,25 @@ export const triangularSchema = z
 
 export type Triangular = z.infer<typeof triangularSchema>;
 
-export function sampleTriangular(
-  input: Triangular,
-  random: RandomSource,
-): number {
+export function quantileTriangular(input: Triangular, uniform: number): number {
   const { min, mode, max } = input;
   if (min === max) return min;
   const width = max - min;
   const peak = Number.isFinite(width)
     ? (mode - min) / width
     : (mode / 2 - min / 2) / (max / 2 - min / 2);
-  const draw = random();
-  if (draw === peak) return mode;
+  if (uniform === peak) return mode;
   const fraction =
-    draw < peak
-      ? Math.sqrt(draw) * Math.sqrt(peak)
-      : 1 - Math.sqrt(1 - draw) * Math.sqrt(1 - peak);
+    uniform < peak
+      ? Math.sqrt(uniform) * Math.sqrt(peak)
+      : 1 - Math.sqrt(1 - uniform) * Math.sqrt(1 - peak);
   return (1 - fraction) * min + fraction * max;
+}
+
+export function sampleTriangular(
+  input: Triangular,
+  random: RandomSource,
+): number {
+  if (input.min === input.max) return input.min;
+  return quantileTriangular(input, random());
 }

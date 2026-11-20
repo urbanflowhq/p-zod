@@ -14,11 +14,19 @@ export const discreteUniformSchema = z
 
 export type DiscreteUniform = z.infer<typeof discreteUniformSchema>;
 
+export function quantileDiscreteUniform(
+  input: DiscreteUniform,
+  uniform: number,
+): number {
+  const { min, max } = input;
+  if (min === max) return min;
+  return Math.min(max, min + Math.floor(uniform * (max - min + 1)));
+}
+
 export function sampleDiscreteUniform(
   input: DiscreteUniform,
   random: RandomSource,
 ): number {
-  const { min, max } = input;
-  if (min === max) return min;
-  return Math.min(max, min + Math.floor(random() * (max - min + 1)));
+  if (input.min === input.max) return input.min;
+  return quantileDiscreteUniform(input, random());
 }

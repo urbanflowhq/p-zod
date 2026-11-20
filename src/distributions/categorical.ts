@@ -38,19 +38,21 @@ function choiceAt<T>(values: [T, ...T[]], index: number): T {
   );
 }
 
-export function sampleCategorical<T>(
+// Choices keep their declared order, so a larger uniform never selects an
+// earlier choice.
+export function quantileCategorical<T>(
   input: Categorical<T>,
-  random: RandomSource,
+  uniform: number,
 ): T {
   const { values, weights } = input;
   if (weights === undefined) {
-    return choiceAt(values, Math.floor(random() * values.length));
+    return choiceAt(values, Math.floor(uniform * values.length));
   }
 
   const maximum = weights.reduce((max, weight) => Math.max(max, weight), 0);
   const normalized = weights.map((weight) => weight / maximum);
   const total = normalized.reduce((sum, weight) => sum + weight, 0);
-  const target = random() * total;
+  const target = uniform * total;
   let cumulative = 0;
   let lastPositiveIndex = 0;
   for (const [index, weight] of normalized.entries()) {
@@ -60,4 +62,11 @@ export function sampleCategorical<T>(
     if (target < cumulative) return choiceAt(values, index);
   }
   return choiceAt(values, lastPositiveIndex);
+}
+
+export function sampleCategorical<T>(
+  input: Categorical<T>,
+  random: RandomSource,
+): T {
+  return quantileCategorical(input, random());
 }

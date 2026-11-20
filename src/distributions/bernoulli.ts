@@ -16,3 +16,8 @@ export function sampleBernoulli(
   if (p === 0 || p === 1) return p;
   return random() < p ? 1 : 0;
 }
+
+// The sampler maps small draws to 1; the quantile orders 0 before 1.
+export function quantileBernoulli(input: Bernoulli, uniform: number): number {
+  return uniform < 1 - input.p ? 0 : 1;
+}

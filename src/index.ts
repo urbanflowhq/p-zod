@@ -56,6 +56,7 @@ export {
 export * as default from "./p.js";
 export * as p from "./p.js";
 export * from "./p.js";
-export type { SamplingOptions } from "./probabilistic.js";
+export type { SamplingOptions, UniformSource } from "./probabilistic.js";
 export { ProbabilisticSchema } from "./probabilistic.js";
+export { quantile, UnsupportedQuantileError } from "./quantile.js";
 export type { RandomSource } from "./random.js";

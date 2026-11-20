@@ -9,3 +9,10 @@ export function checkedRandom(random: RandomSource): RandomSource {
     return draw;
   };
 }
+
+export function checkedUniform(uniform: number): number {
+  if (!Number.isFinite(uniform) || uniform < 0 || uniform >= 1) {
+    throw new RangeError("Uniform must be a number in [0, 1)");
+  }
+  return uniform;
+}

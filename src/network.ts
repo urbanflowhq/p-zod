@@ -14,6 +14,22 @@ import {
 
 type Lift = (schema: z.core.$ZodType) => z.ZodType<SamplingPlan>;
 
+function rvUniform(
+  id: string,
+  uniformFor: (id: string) => number,
+): () => number {
+  let used = false;
+  return () => {
+    if (used)
+      throw new RVError(
+        `RV "${id}" needs more than one uniform; supplied uniforms cover one distribution per RV`,
+        [id],
+      );
+    used = true;
+    return uniformFor(id);
+  };
+}
+
 export function createNetworkCompiler(
   lift: Lift,
   unconstrained: z.core.$ZodType,
@@ -42,7 +58,12 @@ export function createNetworkCompiler(
     context: SamplingContext,
   ): unknown {
     if (context.values.has(id)) return context.values.get(id);
-    const value = plan.draw(context);
+    const { uniformFor } = context;
+    const value = plan.draw(
+      uniformFor === undefined
+        ? context
+        : { ...context, uniform: rvUniform(id, uniformFor) },
+    );
     context.values.set(id, value);
     return value;
   }

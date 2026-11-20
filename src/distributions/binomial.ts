@@ -19,3 +19,20 @@ export function sampleBinomial(input: Binomial, random: RandomSource): number {
   }
   return successes;
 }
+
+// Sums probabilities upward from zero, so cost grows with n like the sampler's.
+export function quantileBinomial(input: Binomial, uniform: number): number {
+  const { n, p } = input;
+  if (p === 0 || n === 0) return 0;
+  if (p === 1) return n;
+  const logOdds = Math.log(p) - Math.log1p(-p);
+  let logProbability = n * Math.log1p(-p);
+  let cumulative = 0;
+  for (let successes = 0; successes < n; successes++) {
+    if (successes > 0)
+      logProbability += Math.log((n - successes + 1) / successes) + logOdds;
+    cumulative += Math.exp(logProbability);
+    if (uniform < cumulative) return successes;
+  }
+  return n;
+}

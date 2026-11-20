@@ -12,7 +12,7 @@ import { sampleTriangular } from "./distributions/triangular.js";
 import { sampleUniform } from "./distributions/uniform.js";
 import type { RandomSource } from "./random.js";
 
-function finite(value: number): number {
+export function finite(value: number): number {
   if (!Number.isFinite(value)) {
     throw new RangeError("Sampled JSON numbers must be finite");
   }
