@@ -33,6 +33,8 @@ The current scope is structured sampling and Bayesian-network forward sampling.
 | Shared references with one raw value per ID per draw                       | Implemented     |
 | JSON databases, conditional tables, graph and parameter validation         | Implemented     |
 | Supplied seeded random sources and repeated prepared draws                 | Implemented     |
+| Quantile (inverse-CDF) functions for ten of the twelve distributions       | Implemented     |
+| Caller-supplied uniforms per RV ID for paired and quasi-random draws       | Implemented     |
 | `p.input`, `p.infer`, transforms, and async outcome validation             | Implemented     |
 | Fitting from observations                                                  | Not implemented |
 | Posterior inference, observations as evidence, or latent-variable learning | Not implemented |
@@ -103,7 +105,8 @@ The sampling wrapper evaluates the configuration and validates the outcome.
 | `model.descriptionSchema`                        | Native Zod description parser for composition        |
 | `model.outcomeSchema`                            | Original Zod outcome schema                          |
 
-`options` currently contains `{ random?: () => number }`.
+`options` contains `{ random?: () => number, uniform?: (id, draw) => number }`.
+See [Supplied uniforms and paired draws](#supplied-uniforms-and-paired-draws).
 
 Description parsing checks literal types, structure, supported built-in checks,
 and distribution parameters. Every categorical alternative is parsed, including
@@ -232,6 +235,39 @@ preparation. Tables can select continuous child distributions.
 This is forward sampling from a declared directed acyclic graph, not posterior
 inference from evidence.
 
+### Supplied uniforms and paired draws
+
+By default, every RV in a draw consumes the shared `random` stream in schema
+traversal order. Adding or removing an RV shifts the draws of the RVs after it.
+
+Pass `uniform: (id, draw) => number` to map one caller-supplied uniform per RV ID
+through that RV's [quantile](#quantiles):
+
+```ts
+const draw = model.createSampler(input, database, {
+  uniform: (id, draw) => sequence(id, draw), // a number in [0, 1)
+});
+```
+
+`draw` is the zero-based index of the prepared draw; `.sample()` and
+`.sampleAsync()` always pass `0`. Each RV ID that a draw evaluates requests at
+most one uniform. The value of an RV then depends only on its uniform and its parents'
+values, so models with different RV sets give equal values for the IDs they
+share. A stratified or scrambled quasi-random sequence keyed by ID can supply the
+uniforms.
+
+- A conditional RV selects its case from its parents, then inverts its own
+  uniform through the selected definition. A reference alias uses the target ID.
+- Inline distributions, including inline categorical choices, keep consuming
+  `random`. A reference that an inline choice selects still uses its own uniform.
+- An RV that needs more than one uniform, such as a stored categorical whose
+  choice is another distribution, throws `RVError`. Gamma and beta RVs throw
+  `UnsupportedQuantileError`.
+- A uniform outside `[0, 1)` throws `RangeError`, as does a nonfinite result,
+  such as an untruncated normal at `0`.
+
+Without the `uniform` option, sampling is unchanged.
+
 ## Runnable use cases
 
 The examples are complete files in [examples](./examples). Run one with
@@ -293,6 +329,69 @@ for only an upper bound, supply `max` instead. Bounds must be finite. A positive
 `stddev` requires `min < max` when both bounds are present. With `stddev: 0`, the
 mean must lie inside the bounds; equal bounds at the mean are allowed. Invalid
 configurations fail during description parsing, before any random draw.
+
+### Compare designs on paired draws
+
+Supplied uniforms give each RV ID the same draws in both models, although the
+second model adds an RV.
+
+<!-- example: examples/paired-designs.mjs -->
+```js
+import p, { quantile } from "@urbanflow/p-zod";
+import z from "zod";
+
+const runs = 1000;
+// One stratified uniform per RV ID and draw, rotated by a hash of the ID.
+function rotation(id) {
+  let hash = 2166136261;
+  for (const character of id)
+    hash = Math.imul(hash ^ character.charCodeAt(0), 16777619);
+  return (hash >>> 0) / 2 ** 32;
+}
+const uniform = (id, draw) => ((draw + 0.5) / runs + rotation(id)) % 1;
+
+const database = p.database({
+  lighting: p.rv.normal({ mean: 8, stddev: 1.5, min: 4, max: 12 }),
+  occupancy: p.rv.triangular({ min: 0.05, mode: 0.1, max: 0.2 }),
+  glazing: p.rv.uniform({ min: 0.3, max: 0.6 }),
+});
+const baseline = p
+  .probabilistic(z.object({ lighting: z.number(), occupancy: z.number() }))
+  .createSampler(
+    { lighting: p.rv.ref("lighting"), occupancy: p.rv.ref("occupancy") },
+    database,
+    { uniform },
+  );
+const glazed = p
+  .probabilistic(
+    z.object({
+      glazing: z.number(),
+      lighting: z.number(),
+      occupancy: z.number(),
+    }),
+  )
+  .createSampler(
+    {
+      glazing: p.rv.ref("glazing"),
+      lighting: p.rv.ref("lighting"),
+      occupancy: p.rv.ref("occupancy"),
+    },
+    database,
+    { uniform },
+  );
+let paired = 0;
+for (let draw = 0; draw < runs; draw++) {
+  const before = baseline();
+  const after = glazed();
+  if (
+    before.lighting === after.lighting &&
+    before.occupancy === after.occupancy
+  )
+    paired++;
+}
+const medianLighting = quantile(database.lighting, 0.5);
+console.log(JSON.stringify({ runs, paired, medianLighting }));
+```
 
 ### Generate API fixtures
 
@@ -648,6 +747,30 @@ Weights must be finite, nonnegative, match the choice count, and include a posit
 entry. Without weights, choices have equal probabilities. Zero-weight choices
 are not drawn but their descriptions are validated.
 
+### Quantiles
+
+`quantile(distribution, u)` returns the value at cumulative probability `u` for
+`u` in `[0, 1)`. It is non-decreasing in `u`, so stratified or quasi-random
+uniforms keep their structure. Like the low-level samplers, it takes a validated
+descriptor and does not parse it.
+
+| Distribution                | Quantile method                                              |
+| --------------------------- | ------------------------------------------------------------ |
+| Uniform, triangular         | Closed form                                                  |
+| Exponential, geometric      | Closed form                                                  |
+| Discrete uniform, bernoulli | Closed form; `0` precedes `1` for bernoulli                  |
+| Categorical                 | Cumulative weights in declared order                         |
+| Normal                      | Wichura's AS241; returns `-Infinity` at `0` without a `min`  |
+| Truncated normal            | AS241 between the bounds' tail probabilities                 |
+| Poisson, binomial           | Cumulative search from zero; cost grows with `lambda` or `n` |
+| Gamma, beta                 | None; throws `UnsupportedQuantileError`                      |
+
+For discrete distributions, `quantile` returns the smallest outcome whose
+cumulative probability exceeds `u`. The uniform, triangular, exponential,
+geometric, discrete uniform, and categorical samplers invert their CDFs, so
+`sampleX(d, () => u)` equals `quantile(d, u)` for them. The bernoulli, normal,
+poisson, and binomial samplers use other methods.
+
 `p.categorical()` defaults to `z.unknown()` for choices. Within a probabilistic
 wrapper, alternatives follow the surrounding outcome schema instead.
 `p.distribution(valueSchema?)` validates one numeric or categorical descriptor;
@@ -671,6 +794,19 @@ The tail method follows [Robert’s truncated normal sampler](https://arxiv.org/
 If a tail bound cannot be represented in standardized floating-point units,
 sampling throws `RangeError` instead of entering a rejection loop.
 
+The normal quantile is accurate to about 1e-16 relative error.
+`|Φ(quantile(u)) − u|` stays below `1e-12 * min(u, 1 − u)` for `u` down to the
+smallest normal double, and below `1.5e-14 * min(u, 1 − u)` for `u` in
+`[1e-10, 1 − 1e-10]`. For truncation, it interpolates between the bounds' tail
+probabilities on the side where they are small, so bounds far in one tail keep
+their precision. Across an interval too narrow for that interpolation, it inverts
+a first-order exponential density instead. A truncated normal whose bounds are
+both more than about 37.5 standard deviations into one tail, where tail
+probabilities become subnormal, throws `RangeError`. Near
+`u = 1`, the representable uniforms limit how far into the upper tail an
+untruncated quantile reaches: `1 − 2 ** -53` maps to about 8.2 standard
+deviations.
+
 Binomial sampling uses repeated Bernoulli trials, so cost grows with `n`. Poisson
 sampling uses exponential waiting times, so expected cost grows with `lambda`.
 Very large parameters are impractical. No stdlib, jStat, or SciPy sampling backend
@@ -690,7 +826,8 @@ an adversarial constant stream can prevent convergence.
 | `src/probabilistic.ts` | Public parsing and sampling wrapper                            |
 | `src/compile.ts`       | Zod traversal and sampling-plan preparation                    |
 | `src/description.ts`   | Description types, draw context, and plan constructors         |
-| `src/distributions/`   | Per-distribution schemas and samplers, plus registry           |
+| `src/distributions/`   | Per-distribution schemas, samplers, quantiles, plus registry   |
+| `src/quantile.ts`      | Public quantile dispatch and `UnsupportedQuantileError`        |
 | `src/rv.ts`            | Plain-data authoring builders                                  |
 | `src/database.ts`      | Definition validation, conditional structure, and graph checks |
 | `src/json.ts`          | JSON validation and copying at the storage boundary            |
@@ -719,9 +856,9 @@ preparation. Typed distribution samplers do not parse their inputs.
 
 ### Add a distribution
 
-1. Add its schema, inferred type, and sampler under `src/distributions/`.
-2. Register the schema and numeric dispatch in `src/distributions/index.ts` and
-   `src/sample.ts`, or add the appropriate nonnumeric plan.
+1. Add its schema, inferred type, sampler, and quantile under `src/distributions/`.
+2. Register the schema and numeric dispatch in `src/distributions/index.ts`,
+   `src/sample.ts`, and `src/quantile.ts`, or add the appropriate nonnumeric plan.
 3. Add its factory to `src/p.ts` and builder to `src/rv.ts`.
 4. Export its type and low-level sampler from `src/index.ts`, keeping raw schemas
    internal to the entry point.

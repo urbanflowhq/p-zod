@@ -14,9 +14,13 @@ export const uniformSchema = z
 
 export type Uniform = z.infer<typeof uniformSchema>;
 
-export function sampleUniform(input: Uniform, random: RandomSource): number {
+export function quantileUniform(input: Uniform, uniform: number): number {
   const { min, max } = input;
   if (min === max) return min;
-  const draw = random();
-  return (1 - draw) * min + draw * max;
+  return (1 - uniform) * min + uniform * max;
+}
+
+export function sampleUniform(input: Uniform, random: RandomSource): number {
+  if (input.min === input.max) return input.min;
+  return quantileUniform(input, random());
 }

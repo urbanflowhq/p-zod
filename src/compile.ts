@@ -9,6 +9,7 @@ import {
 } from "./description.js";
 import {
   categoricalSchema,
+  quantileCategorical,
   sampleCategorical,
 } from "./distributions/categorical.js";
 import {
@@ -16,7 +17,8 @@ import {
   numericDistributionSchema,
 } from "./distributions/index.js";
 import { createNetworkCompiler } from "./network.js";
-import { sampleNumeric } from "./sample.js";
+import { quantileNumeric } from "./quantile.js";
+import { finite, sampleNumeric } from "./sample.js";
 
 const unconstrained = z.unknown();
 
@@ -43,7 +45,10 @@ export function compileDescription(
   const cache = new WeakMap<z.core.$ZodType, z.ZodType<SamplingPlan>>();
   const numericPlan = parsedPlan(numericDistributionSchema, (value) => ({
     description: value,
-    draw: (context) => sampleNumeric(value, context.random),
+    draw: (context) =>
+      context.uniform === undefined
+        ? sampleNumeric(value, context.random)
+        : finite(quantileNumeric(value, context.uniform())),
   }));
 
   const network = createNetworkCompiler(lift, unconstrained, database);
@@ -59,7 +64,10 @@ export function compileDescription(
           values: value.values.map((choice) => choice.description),
         },
         draw: (context) =>
-          sampleCategorical(value, context.random).draw(context),
+          (context.uniform === undefined
+            ? sampleCategorical(value, context.random)
+            : quantileCategorical(value, context.uniform())
+          ).draw(context),
       }));
       return z.transform((input, ctx) => {
         const tag = distributionTag(input);

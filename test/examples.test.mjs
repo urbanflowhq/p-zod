@@ -32,6 +32,10 @@ for (const { path, code: snippet } of matches) {
       assert.equal(result.second.quotedPrice, result.second.chargedPrice);
       assert.notEqual(result.first.quotedPrice, result.second.quotedPrice);
     }
+    if (path.endsWith("paired-designs.mjs")) {
+      assert.equal(result.paired, result.runs);
+      assert.equal(result.medianLighting, 8);
+    }
     if (path.endsWith("errors.mjs")) {
       assert.deepEqual(result, {
         literalAccepted: false,

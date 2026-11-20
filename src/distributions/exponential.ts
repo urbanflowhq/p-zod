@@ -8,10 +8,16 @@ export const exponentialSchema = z.object({
 
 export type Exponential = z.infer<typeof exponentialSchema>;
 
+export function quantileExponential(
+  input: Exponential,
+  uniform: number,
+): number {
+  return -Math.log1p(-uniform) / input.rate;
+}
+
 export function sampleExponential(
   input: Exponential,
   random: RandomSource,
 ): number {
-  const { rate } = input;
-  return -Math.log1p(-random()) / rate;
+  return quantileExponential(input, random());
 }

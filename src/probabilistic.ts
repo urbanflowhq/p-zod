@@ -2,10 +2,14 @@ import * as z from "zod";
 import { compileDescription } from "./compile.js";
 import { parseDatabase, type RVDatabase } from "./database.js";
 import type { Description, SamplingPlan } from "./description.js";
-import { checkedRandom, type RandomSource } from "./random.js";
+import { checkedRandom, checkedUniform, type RandomSource } from "./random.js";
+
+// Returns the uniform for an RV ID on a prepared sampler's zero-based draw.
+export type UniformSource = (id: string, draw: number) => number;
 
 export interface SamplingOptions {
   random?: RandomSource;
+  uniform?: UniformSource;
 }
 
 export class ProbabilisticSchema<Schema extends z.core.$ZodType> {
@@ -47,7 +51,18 @@ export class ProbabilisticSchema<Schema extends z.core.$ZodType> {
         ? databaseOrRandom
         : (options.random ?? Math.random),
     );
-    return () => plan.draw({ random, values: new Map() });
+    const { uniform } = options;
+    if (uniform === undefined)
+      return () => plan.draw({ random, values: new Map() });
+    let draw = 0;
+    return () => {
+      const index = draw++;
+      return plan.draw({
+        random,
+        values: new Map(),
+        uniformFor: (id) => checkedUniform(uniform(id, index)),
+      });
+    };
   }
 
   sample(

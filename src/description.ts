@@ -29,6 +29,11 @@ export type Description<T> =
 export interface SamplingContext {
   random: RandomSource;
   values: Map<string, unknown>;
+  // The caller's uniform for each RV ID in this draw, when supplied.
+  uniformFor?: (id: string) => number;
+  // The uniform of the RV being drawn. Distributions invert it instead of
+  // consuming the shared random stream.
+  uniform?: RandomSource;
 }
 
 export interface SamplingPlan {
